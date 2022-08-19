@@ -5,9 +5,9 @@ use std::{
 
 #[derive(Debug)]
 pub struct Input {
-    value: String,
-    network_inputs: Vec<f64>,
-    correctly_spelled: bool,
+    pub value: String,
+    pub network_inputs: Vec<f64>,
+    pub correctly_spelled: bool,
 }
 
 pub fn convert_to_network_input(c: char)-> f64 {

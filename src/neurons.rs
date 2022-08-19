@@ -1,13 +1,16 @@
 use rand::{thread_rng, Rng};
 
+#[derive(Clone)]
 pub struct Neuron {
     pub weights: Vec<f64>,
     pub bias: f64,
     pub value: f64, // Temperary storage for the value of the neuron.
 }
+#[derive(Clone)]
 pub struct Layer {
     pub neurons: Vec<Neuron>,
 }
+#[derive(Clone)]
 pub struct Network {
     pub layers: Vec<Layer>,
 }
@@ -53,7 +56,7 @@ pub fn randomized_network(description: &NetworkDescription) -> Network {
     network
 }
 
-pub type ActivationFunction = fn(f64) -> f64;
+type ActivationFunction = dyn Fn(f64) -> f64;
 
 impl Network {
     pub fn apply(
@@ -87,7 +90,15 @@ impl Network {
             for neuron in &last_layer.neurons {
                 outputs.push(activation_function(neuron.value));
             }
+            self.clear();
             return outputs;
+        }
+    }
+    pub fn clear(&mut self) {
+        for layer in &mut self.layers {
+            for neuron in &mut layer.neurons {
+                neuron.value = 0.0;
+            }
         }
     }
 }
