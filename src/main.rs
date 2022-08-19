@@ -2,7 +2,8 @@
 
 extern crate rand;
 mod neurons;
+mod inputs;
 
 fn main() {
-    println!("Hello, world!");
+    println!("{:#?}", inputs::read_inputs("inputs.txt"));
 }
