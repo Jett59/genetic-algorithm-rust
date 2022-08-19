@@ -1,20 +1,80 @@
 #![allow(dead_code)]
 
-extern crate rand;
+use std::io::Write;
+
+use rand::{seq::SliceRandom, thread_rng};
+use trainer::{Scorer, Trainer};
+
 mod inputs;
 mod neurons;
+mod trainer;
 
 fn main() {
-    let mut network = neurons::randomized_network(&neurons::NetworkDescription {
-        layer_sizes: vec![20, 20, 1],
-    });
-    let inputs = inputs::read_inputs("inputs.txt");
-    for input in inputs {
-        let results = network.apply(&input.network_inputs, &default_activation);
-        println!("{}: {}", input.value, results[0]);
+    let network_description = neurons::NetworkDescription {
+        layer_sizes: vec![20, 50, 1],
+    };
+    let mut inputs = inputs::read_inputs("inputs.txt");
+    inputs.shuffle(&mut thread_rng());
+    let (training_inputs, testing_inputs) = inputs.split_at(inputs.len() / 2);
+    let scorer = inputs::Scorer {};
+    let mut trainer = Trainer::new(
+        128,
+        &network_description,
+        training_inputs.to_vec(),
+        scorer,
+        &neurons::default_activation,
+    );
+    println!("Training score: {}", trainer.get_best().score);
+    println!(
+        "Testing score: {}",
+        scorer.score_network(
+            &testing_inputs.to_vec(),
+            &mut trainer.get_best().network,
+            &neurons::default_activation
+        )
+    );
+    trainer.train(2000.0, 10, &neurons::default_activation);
+    println!("Training score: {}", trainer.get_best().score);
+    println!(
+        "Testing score: {}",
+        scorer.score_network(
+            &testing_inputs.to_vec(),
+            &mut trainer.get_best().network,
+            &neurons::default_activation
+        )
+    );
+    loop {
+        break;
+        print!("> ");
+        std::io::stdout().flush().unwrap();
+        let mut line = String::new();
+        std::io::stdin()
+            .read_line(&mut line)
+            .expect("Failed to read from standard input");
+        line = String::from(line.trim());
+        if line == "exit" {
+            break;
+        } else if line == "train" {
+            trainer.train(1000.0, 100, &neurons::default_activation);
+            println!("Training score: {}", trainer.get_best().score);
+            println!(
+        "Testing score: {}",
+        scorer.score_network(
+            &testing_inputs.to_vec(),
+            &mut trainer.get_best().network,
+            &neurons::default_activation
+        )
+    );
+        } else {
+            let output = trainer.get_best().network.apply(
+                &inputs::convert_to_network_inputs(line.as_str()),
+                &neurons::default_activation,
+            )[0];
+            if output < 0.5 {
+                println!("{} is not correctly spelled", line);
+            } else {
+                println!("{} is correctly spelled", line);
+            }
+        }
     }
-}
-
-fn default_activation(x: f64) -> f64 {
-        (x / (x.abs() + 1.0) + 1.0) / 2.0
 }

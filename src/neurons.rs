@@ -56,7 +56,11 @@ pub fn randomized_network(description: &NetworkDescription) -> Network {
     network
 }
 
-type ActivationFunction = dyn Fn(f64) -> f64;
+pub type ActivationFunction = dyn Fn(f64) -> f64;
+
+pub fn default_activation(x: f64) -> f64 {
+    (x / (x.abs() + 1.0) + 1.0) / 2.0
+}
 
 impl Network {
     pub fn apply(
@@ -100,5 +104,27 @@ impl Network {
                 neuron.value = 0.0;
             }
         }
+    }
+    pub fn mutated(&self, mutation_rate: f64) -> Network {
+        let mut network = self.clone();
+        if network.layers.len() > 0 {
+            let layer_index = thread_rng().gen_range(0..network.layers.len());
+            let layer = &mut network.layers[layer_index];
+            if layer.neurons.len() > 0 {
+                let neuron_index = thread_rng().gen_range(0..layer.neurons.len());
+                let neuron = &mut layer.neurons[neuron_index];
+                if neuron.weights.len() > 0 {
+                    if thread_rng().gen_bool(0.9) {
+                        let weight_index = thread_rng().gen_range(0..neuron.weights.len());
+                        let weight = &mut neuron.weights[weight_index];
+                        *weight += thread_rng().gen_range(-1.0..1.0) * mutation_rate;
+                    }
+                }
+                if thread_rng().gen_bool(0.25) {
+                    neuron.bias += thread_rng().gen_range(-1.0..1.0) * mutation_rate;
+                }
+            }
+        }
+        network
     }
 }
