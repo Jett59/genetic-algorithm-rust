@@ -1,10 +1,12 @@
-use std::{collections::{BinaryHeap, binary_heap::PeekMut}};
+use std::collections::BinaryHeap;
 
 use crate::neurons::{self, NetworkDescription};
 
+#[derive(Clone)]
 pub struct ScoredNetwork {
     pub score: f64,
     pub network: neurons::Network,
+    age: f64,
 }
 
 impl PartialEq for ScoredNetwork {
@@ -16,7 +18,7 @@ impl Eq for ScoredNetwork {}
 
 impl PartialOrd for ScoredNetwork {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.score.partial_cmp(&other.score)
+        (self.score / self.age as f64).partial_cmp(&(other.score / other.age as f64))
     }
 }
 impl Ord for ScoredNetwork {
@@ -32,7 +34,12 @@ pub trait Input {
 pub trait Scorer<InputType: Input> {
     fn score(&self, input: &InputType, outputs: &Vec<f64>) -> f64;
 
-    fn score_network(&self, inputs: &Vec<InputType>, network: &mut neurons::Network, activation_function: &neurons::ActivationFunction)->f64 {
+    fn score_network(
+        &self,
+        inputs: &Vec<InputType>,
+        network: &mut neurons::Network,
+        activation_function: &neurons::ActivationFunction,
+    ) -> f64 {
         let mut score = 0.0;
         for input in inputs {
             let output = network.apply(input.get_network_inputs(), activation_function);
@@ -57,6 +64,7 @@ impl ScoredNetwork {
         ScoredNetwork {
             score: total_score / inputs.len() as f64,
             network: network,
+            age: 1.0,
         }
     }
 }
@@ -92,15 +100,32 @@ impl<InputType: Input, ScorerType: Scorer<InputType>> Trainer<InputType, ScorerT
             scorer: scorer,
         }
     }
-    pub fn get_best(&mut self)-> PeekMut<ScoredNetwork> {
-        self.networks.peek_mut().unwrap()
+    pub fn get_best(&mut self) -> ScoredNetwork {
+        (*self
+            .networks
+            .iter()
+            .max_by(|a, b| a.score.partial_cmp(&b.score).unwrap())
+            .unwrap())
+        .clone()
     }
-    pub fn train(&mut self, mutation_rate: f64, iterations: usize, activation_function: &neurons::ActivationFunction) {
+    pub fn train(
+        &mut self,
+        mutation_rate: f64,
+        iterations: usize,
+        activation_function: &neurons::ActivationFunction,
+    ) {
         for _i in 0..iterations {
-            let mut new_networks: BinaryHeap<ScoredNetwork> = BinaryHeap::with_capacity(self.population_size);
+            let mut new_networks: BinaryHeap<ScoredNetwork> =
+                BinaryHeap::with_capacity(self.population_size);
             while new_networks.len() < self.population_size {
-                let network = self.networks.pop().unwrap();
-                new_networks.push(ScoredNetwork::new(network.network.mutated(mutation_rate), &self.inputs, &self.scorer, activation_function));
+                let mut network = self.networks.pop().unwrap();
+                new_networks.push(ScoredNetwork::new(
+                    network.network.mutated(mutation_rate),
+                    &self.inputs,
+                    &self.scorer,
+                    activation_function,
+                ));
+                network.age += 0.125;
                 new_networks.push(network);
             }
             self.networks = new_networks;

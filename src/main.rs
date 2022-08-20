@@ -11,14 +11,14 @@ mod trainer;
 
 fn main() {
     let network_description = neurons::NetworkDescription {
-        layer_sizes: vec![20, 50, 1],
+        layer_sizes: vec![20, 25, 25, 1],
     };
     let mut inputs = inputs::read_inputs("inputs.txt");
     inputs.shuffle(&mut thread_rng());
     let (training_inputs, testing_inputs) = inputs.split_at(inputs.len() / 2);
     let scorer = inputs::Scorer {};
     let mut trainer = Trainer::new(
-        128,
+        1024,
         &network_description,
         training_inputs.to_vec(),
         scorer,
@@ -33,7 +33,7 @@ fn main() {
             &neurons::default_activation
         )
     );
-    trainer.train(2000.0, 10, &neurons::default_activation);
+    trainer.train(1000.0, 128, &neurons::default_activation);
     println!("Training score: {}", trainer.get_best().score);
     println!(
         "Testing score: {}",
@@ -44,7 +44,6 @@ fn main() {
         )
     );
     loop {
-        break;
         print!("> ");
         std::io::stdout().flush().unwrap();
         let mut line = String::new();
@@ -55,7 +54,7 @@ fn main() {
         if line == "exit" {
             break;
         } else if line == "train" {
-            trainer.train(1000.0, 100, &neurons::default_activation);
+            trainer.train(1000.0, 128, &neurons::default_activation);
             println!("Training score: {}", trainer.get_best().score);
             println!(
         "Testing score: {}",

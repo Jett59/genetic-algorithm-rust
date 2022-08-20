@@ -23,9 +23,9 @@ pub struct Scorer {}
 impl trainer::Scorer<Input> for Scorer {
     fn score(&self, input: &Input, outputs: &Vec<f64>) -> f64 {
         if input.correctly_spelled {
-            outputs[0].round()
+            outputs[0]
         } else {
-            1.0 - outputs[0].round()
+            1.0 - outputs[0]
         }
     }
 }
