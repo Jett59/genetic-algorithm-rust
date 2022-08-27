@@ -13,8 +13,8 @@ pub struct ForkJoinPool<Param, Result, Context> {
     threads: Vec<WorkerThread<Param, Result, Context>>,
 }
 
-impl<Param: 'static + Send, Result: 'static + Send, Context: 'static +  Send + Clone> ForkJoinPool<Param, Result, Context> {
-    pub fn new(handler: fn(Context, Param) -> Result) -> ForkJoinPool<Param, Result, Context> {
+impl<Param: 'static + Send, Result: 'static + Send, Context: 'static + Send + Clone> ForkJoinPool<Param, Result, Context> {
+    fn new(handler: fn(Context, Param) -> Result) -> ForkJoinPool<Param, Result, Context> {
         let num_threads = available_parallelism()
             .expect("Failed to find out available parallelism")
             .get();
@@ -46,17 +46,16 @@ impl<Param: 'static + Send, Result: 'static + Send, Context: 'static +  Send + C
         mut params: Vec<Param>,
         result_initializer: &dyn Fn() -> Result,
         collector: &dyn Fn(Result, Result) -> Result,
-        context: Context,
+        context: &mut Context,
     ) -> Result {
-        let num_params = params.len();
-        for i in 0..num_params {
+        for i in 0..params.len() {
             self.threads[i % self.threads.len()]
                 .input_sender
                 .send(Some((context.clone(), params.pop().unwrap())))
                 .expect("Failed to send input");
         }
         let mut result = result_initializer();
-        for i in 0..num_params {
+        for i in 0..params.len() {
             // Pass result second to have the results reversed because the code to send the params sends them backwards.
             result = collector(
                 self.threads[i % self.threads.len()]
