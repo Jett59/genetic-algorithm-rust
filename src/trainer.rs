@@ -1,6 +1,9 @@
 use std::collections::BinaryHeap;
 
-use crate::neurons::{self, NetworkDescription};
+use crate::{
+    neurons::{self, NetworkDescription},
+    parallel::ForkJoinPool,
+};
 
 #[derive(Clone)]
 pub struct ScoredNetwork {
@@ -27,40 +30,68 @@ impl Ord for ScoredNetwork {
     }
 }
 
-pub trait Input {
+pub trait Input: Send {
     fn get_network_inputs(&self) -> &Vec<f64>;
 }
 
-pub trait Scorer<InputType: Input> {
+pub trait Scorer<InputType: 'static + Input + Clone>: Send + Clone {
     fn score(&self, input: &InputType, outputs: &Vec<f64>) -> f64;
+
+    fn create_worker_pool() -> ForkJoinPool<InputType, f64, (Self, neurons::Network, fn(f64) -> f64)>
+    where
+        Self: 'static,
+    {
+        let pool = ForkJoinPool::new(
+            |(scorer, mut network, activation_function): (
+                Self,
+                neurons::Network,
+                fn(f64) -> f64,
+            ),
+             input: InputType| {
+                scorer.score(
+                    &input,
+                    &network.apply(input.get_network_inputs(), activation_function),
+                )
+            },
+        );
+        pool
+    }
 
     fn score_network(
         &self,
         inputs: &Vec<InputType>,
         network: &mut neurons::Network,
-        activation_function: &neurons::ActivationFunction,
-    ) -> f64 {
-        let mut score = 0.0;
-        for input in inputs {
-            let output = network.apply(input.get_network_inputs(), activation_function);
-            score += self.score(input, &output);
-        }
-        score / inputs.len() as f64
+        activation_function: neurons::ActivationFunction,
+        thread_pool: &mut ForkJoinPool<InputType, f64, (Self, neurons::Network, fn(f64) -> f64)>,
+    ) -> f64
+    where
+        Self: 'static + Sized,
+    {
+        let total_score = ForkJoinPool::exec_and_collect(
+            thread_pool,
+            inputs.clone(),
+            &|| 0.0,
+            &|a, b| a + b,
+            (self.clone(), network.clone(), activation_function),
+        );
+        total_score / inputs.len() as f64
     }
 }
 
 impl ScoredNetwork {
-    pub fn new<InputType: Input, ScorerType: Scorer<InputType>>(
+    pub fn new<InputType: 'static + Input + Clone, ScorerType: 'static + Scorer<InputType>>(
         mut network: neurons::Network,
         inputs: &Vec<InputType>,
         scorer: &ScorerType,
-        activation_function: &neurons::ActivationFunction,
+        activation_function: neurons::ActivationFunction,
+        thread_pool: &mut ForkJoinPool<
+            InputType,
+            f64,
+            (ScorerType, neurons::Network, fn(f64) -> f64),
+        >,
     ) -> ScoredNetwork {
-        let mut total_score = 0.0;
-        for input in inputs {
-            let outputs = network.apply(input.get_network_inputs(), activation_function);
-            total_score += scorer.score(input, &outputs);
-        }
+        let total_score =
+            scorer.score_network(inputs, &mut network, activation_function, thread_pool);
         ScoredNetwork {
             score: total_score / inputs.len() as f64,
             network: network,
@@ -69,20 +100,27 @@ impl ScoredNetwork {
     }
 }
 
-pub struct Trainer<InputType: Input, ScorerType: Scorer<InputType>> {
+pub struct Trainer<InputType: 'static + Input + Clone, ScorerType: Scorer<InputType>> {
     networks: BinaryHeap<ScoredNetwork>,
     population_size: usize,
     pub inputs: Vec<InputType>,
     pub scorer: ScorerType,
 }
 
-impl<InputType: Input, ScorerType: Scorer<InputType>> Trainer<InputType, ScorerType> {
+impl<InputType: Input + Clone, ScorerType: 'static + Scorer<InputType>>
+    Trainer<InputType, ScorerType>
+{
     pub fn new(
         population_size: usize,
         network_description: &NetworkDescription,
         inputs: Vec<InputType>,
         scorer: ScorerType,
-        activation_function: &neurons::ActivationFunction,
+        activation_function: neurons::ActivationFunction,
+        thread_pool: &mut ForkJoinPool<
+            InputType,
+            f64,
+            (ScorerType, neurons::Network, fn(f64) -> f64),
+        >,
     ) -> Trainer<InputType, ScorerType> {
         let mut networks: BinaryHeap<ScoredNetwork> = BinaryHeap::with_capacity(population_size);
         for _i in 0..population_size {
@@ -91,6 +129,7 @@ impl<InputType: Input, ScorerType: Scorer<InputType>> Trainer<InputType, ScorerT
                 &inputs,
                 &scorer,
                 activation_function,
+                thread_pool,
             ));
         }
         Trainer {
@@ -112,7 +151,11 @@ impl<InputType: Input, ScorerType: Scorer<InputType>> Trainer<InputType, ScorerT
         &mut self,
         mutation_rate: f64,
         iterations: usize,
-        activation_function: &neurons::ActivationFunction,
+        activation_function: neurons::ActivationFunction,
+        thread_pool: &mut ForkJoinPool<
+            InputType,
+            f64,
+            (ScorerType, neurons::Network, fn(f64) -> f64)>,
     ) {
         for _i in 0..iterations {
             let mut new_networks: BinaryHeap<ScoredNetwork> =
@@ -124,6 +167,7 @@ impl<InputType: Input, ScorerType: Scorer<InputType>> Trainer<InputType, ScorerT
                     &self.inputs,
                     &self.scorer,
                     activation_function,
+                    thread_pool,
                 ));
                 network.age += 0.125;
                 new_networks.push(network);

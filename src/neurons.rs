@@ -6,18 +6,24 @@ pub struct Neuron {
     pub bias: f64,
     pub value: f64, // Temperary storage for the value of the neuron.
 }
+unsafe impl Send for Neuron {}
+
 #[derive(Clone)]
 pub struct Layer {
     pub neurons: Vec<Neuron>,
 }
+unsafe impl Send for Layer {}
+
 #[derive(Clone)]
 pub struct Network {
     pub layers: Vec<Layer>,
 }
+unsafe impl Send for Network {}
 
 pub struct NetworkDescription {
     pub layer_sizes: Vec<usize>,
 }
+unsafe impl Send for NetworkDescription {}
 
 pub fn randomized_network(description: &NetworkDescription) -> Network {
     let mut network = Network { layers: Vec::new() };
@@ -56,7 +62,7 @@ pub fn randomized_network(description: &NetworkDescription) -> Network {
     network
 }
 
-pub type ActivationFunction = dyn Fn(f64) -> f64;
+pub type ActivationFunction = fn(f64) -> f64;
 
 pub fn default_activation(x: f64) -> f64 {
     (x / (x.abs() + 1.0) + 1.0) / 2.0
@@ -66,7 +72,7 @@ impl Network {
     pub fn apply(
         &mut self,
         inputs: &Vec<f64>,
-        activation_function: &ActivationFunction,
+        activation_function: ActivationFunction,
     ) -> Vec<f64> {
         {
             let first_layer = &mut self.layers[0];
